@@ -1,5 +1,5 @@
 ---
-title: "Project 4"
+title: "Safi Data Project"
 output:
   html_document:
     theme:
@@ -15,7 +15,7 @@ library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-This is the dataset you will be working with:
+This is the dataset we will be working with:
 
 ```{r message = FALSE}
 safi_data <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-06-13/safi_data.csv')
