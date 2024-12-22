@@ -1,0 +1,120 @@
+---
+title: "Project 4"
+output:
+  html_document:
+    theme:
+      version: 4
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(colorspace)
+library(dplyr)
+library(broom)
+library(ggplot2)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This is the dataset you will be working with:
+
+```{r message = FALSE}
+safi_data <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/master/data/2023/2023-06-13/safi_data.csv')
+
+safi_data
+```
+
+More information about the dataset can be found here:
+https://github.com/rfordatascience/tidytuesday/tree/master/data/2023/2023-06-13#safi-survey-data and here: https://figshare.com/articles/dataset/SAFI_Survey_Results/6262019/1?file=11444114
+
+
+**Question:**  
+*What factors are associated with food insecurity (measured by 'months_lack_food' and 'no_meals') among households, and does membership in an irrigation association influence food security outcomes?*
+
+**Introduction:**  
+*The SAFI (Studying African Farmer-Led Irrigation) dataset provides a snapshot of various household and agricultural characteristics of farmers in select regions of Africa. This dataset includes critical information on household demographics, living conditions, food security, and access to agricultural resources like irrigation associations. Each row represents a unique household, identified by a "key_ID" and "instanceID," with columns capturing details such as the "village" of residence, number of household members ("no_membrs"), years spent in the village ("years_liv"), and the type of house walls ("respondent_wall_type"). The data also includes indicators of food security, including the typical number of daily meals ("no_meals") and months during the last year when households faced food shortages ("months_lack_food"). Together, these features offer a foundation for understanding the potential relationship between household characteristics, access to resources, and food security among farming communities. * 
+
+*This analysis seeks to address the question: "What factors contribute to food insecurity among households, and does membership in an irrigation association influence food security outcomes?" To explore this question, we apply Principal Component Analysis (PCA) on key numeric variables, including "no_membrs" (household size), "years_liv" (years spent in the village), "rooms" (number of rooms for sleeping), "liv_count" (livestock count), "no_meals" (daily meals), and "no_months_lack_food" calculated based on "months_lack_food". By examining patterns in these variables, we aim to identify underlying factors associated with food insecurity and highlight any correlation with the irrigation association membership. This analysis could inform targeted strategies for improving food security and support for agricultural households.*
+
+**Approach:**  
+*To explore the factors associated with food insecurity and the potential role of irrigation association membership, I will preprocess the data by selecting relevant variables and encoding membership as a binary variable. The "months_lack_food" variable will be processed to calculate the number of months of food insecurity, and missing values will be removed. I will then apply Principal Component Analysis (PCA) to reduce dimensionality and identify key factors driving food insecurity, using standardized numeric variables.  *
+
+*The PCA results, including the computed table and rotation matrix, will help interpret the contributions of each variable. A scatter plot of the first two principal components will be color-coded by membership status to explore the relationship between food insecurity and membership. These analyses will be supported by visualizations and the computed PCA table, which will help illustrate the distribution of food insecurity and the potential benefits of irrigation association membership. The scatter plot will provide a visual representation of how food insecurity varies with membership, while the PCA results will highlight the main factors contributing to food insecurity.*
+
+**Analysis:**
+
+```{r}
+# Data preprocessing
+safi_numeric <- safi_data %>%
+  select(no_membrs, years_liv, rooms, liv_count, no_meals, months_lack_food, memb_assoc) %>%
+  filter(!is.na(memb_assoc) & memb_assoc %in% c("yes", "no")) %>%  # Remove NULL or unexpected values in memb_assoc
+  mutate(memb_assoc = ifelse(memb_assoc == "yes", 1, 0)) %>%
+  mutate(no_months_lack_food = str_split(months_lack_food, ";") %>% 
+           sapply(length)) %>%
+  select(-months_lack_food) %>%  # Remove non-numeric column
+  drop_na()  # Remove any rows with remaining NA values
+
+# Standardize only numeric data (excluding memb_assoc)
+safi_data_scaled <- safi_numeric %>%
+  select(-memb_assoc) %>%
+  scale()
+
+# Run PCA
+pca_result <- prcomp(safi_data_scaled)
+pca_result
+```
+```{r}
+# Use augment to add PCs to the original dataset
+safi_pca <- augment(pca_result, safi_numeric)
+
+# Plot PCA results
+ggplot(safi_pca, aes(.fittedPC1, .fittedPC2, color = factor(memb_assoc, labels = c("Not a member", "Member")))) +
+  geom_point() +
+  labs(color = "Membership Association") +
+  theme_minimal() +
+  ggtitle("PCA Plot of SAFI Data with Membership Association")
+```
+
+
+```{r}
+arrow_style <- arrow(
+  angle = 20, length = grid::unit(8, "pt"),
+  ends = "first", type = "closed"
+)
+
+# Prepare data with adjusted hjust and vjust
+rotation_data <- pca_result %>%
+  tidy(matrix = "rotation") %>%
+  pivot_wider(
+    names_from = "PC", values_from = "value",
+    names_prefix = "PC"
+  ) %>%
+  mutate(
+    hjust = ifelse(PC1 > 0, 1.2, -0.1),
+    vjust = ifelse(PC2 > 0, -0.2, 1.2)
+  )
+
+# Plot with adjusted hjust and vjust
+ggplot(rotation_data, aes(PC1, PC2)) +
+  geom_segment(
+    aes(xend = 0, yend = 0),
+    arrow = arrow_style
+  ) +
+  geom_text(
+    aes(label = column, x = PC1, y = PC2),  # Place labels at the end of the arrows
+    nudge_x = 0.25, nudge_y = 0.06  # Slightly adjust position of labels if needed
+  ) +
+  #geom_text(
+    #aes(label = column, hjust = hjust, vjust = vjust)
+  #) +
+  xlim(-1, 1) + ylim(-1, 1) + 
+  coord_fixed() +
+  labs(x = "PC1", y = "PC2", title = "PCA Rotation Matrix")
+```
+
+**Discussion:**  
+*The PCA results provide valuable insights into factors associated with food insecurity among households, as represented by the variables months_lack_food and no_meals. The loadings and rotation plot reveal that food insecurity variables (months_lack_food and no_meals) load heavily onto the second principal component (PC2), suggesting that these variables are closely related and represent a distinct dimension of variation within the data. Notably, no_meals is negatively associated with PC2, while months_lack_food is positively associated, implying that these variables might capture different aspects of food insecurity—possibly the quantity of meals versus the duration of food shortages. This relationship suggests that households experiencing prolonged food shortages might not necessarily have a reduced number of meals daily, or vice versa, which highlights the complexity of food insecurity and its varying manifestations.*  
+
+*The variables no_membrs (household size) and liv_count (number of livestock) exhibit strong loadings on the first principal component (PC1), indicating that household size and livestock ownership are primary contributors to variance in the dataset, though they are not directly associated with food insecurity measures on PC2. This could suggest that larger households and those with more livestock have diverse needs and resources that influence household dynamics in ways not directly related to food insecurity in this data. However, given the cultural and economic importance of livestock, it's plausible that these assets could indirectly buffer against food insecurity, potentially helping households withstand periods of scarcity.*  
+
+*Furthermore, the results do not explicitly show a direct influence of membership in an irrigation association on food security outcomes in the primary components. This might suggest that irrigation association membership does not have a strong, consistent impact across all households or that its influence is more nuanced, depending on other factors not captured in the principal components. It’s possible that other unobserved variables, like access to markets or income level, may interact with irrigation association membership to affect food security in ways this analysis does not capture directly. Future analyses might explore interaction effects or segment the data to determine whether irrigation membership has different effects for specific subgroups, such as larger households or those with fewer livestock.*
+
