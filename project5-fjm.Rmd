@@ -1,0 +1,123 @@
+---
+title: "Project 5"
+output:
+  html_document:
+    theme:
+      version: 4
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(colorspace)
+library(broom)
+library(cluster)    
+library(tidytuesdayR)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Read in the dataset you will be working with:
+
+```{r message = FALSE}
+
+# Get the list of files for a week.
+tuesdata <- tidytuesdayR::tt_load('2024-02-13')
+
+historical_spending <- tuesdata$historical_spending
+
+head(historical_spending)
+
+```
+
+*Provide more information about the dataset here.*
+
+**Question:** *"How have spending patterns on Valentine's Day evolved across different gift categories, and what distinct consumer spending clusters can be identified over the years?"*
+
+**Introduction:**  *The Valentine's Day Consumer dataset provides insights into spending patterns for various gift categories over time. The dataset includes information on different types of spending such as candy, flowers, jewelry, greeting cards, evening outings, clothing, and gift cards, as well as the percentage of people celebrating Valentine's Day each year. The main objective of this analysis is to explore how consumer spending on Valentine's Day has evolved over the years across different categories and to identify distinct clusters of consumer spending behavior.*  
+
+*To address this, we focus on the gift-related spending columns: Candy, Flowers, Jewelry, GreetingCards, EveningOut, Clothing, and GiftCards. These variables will be used in the clustering analysis to identify patterns in consumer behavior over time. Additionally, the Year and PerPerson columns are essential for analyzing trends over time. Through clustering and trend analysis, this project aims to uncover how different groups of consumers allocate their spending across various gift categories and how these patterns have changed throughout the years.*
+
+**Approach:**  *To explore how Valentine's Day spending patterns have evolved over time and identify distinct consumer spending clusters, I will perform two main types of analysis: clustering and trend analysis. For the clustering analysis, I will apply k-means clustering to the selected spending categories (**Candy**, **Flowers**, **Jewelry**, **GreetingCards**, **EveningOut**, **Clothing**, and **GiftCards**). This unsupervised learning technique will group years with similar spending behaviors, allowing us to identify patterns of consumer preferences across different gift categories. To visualize these clusters, I will use Principal Component Analysis (PCA) for dimensionality reduction and create a scatter plot, where the clusters will be represented by different colors. This approach helps in simplifying high-dimensional data and provides a clear visual representation of how consumer spending is grouped.*  
+
+*For the trend analysis, I will create a line plot showing the change in PerPerson spending across the years for each gift category. This will allow us to observe how spending has shifted over time for each category, providing insights into consumer trends and preferences. The line plot is chosen because it effectively highlights the temporal evolution of spending patterns, making it easier to identify long-term trends or shifts in consumer behavior. By combining clustering with trend analysis, this approach will offer a comprehensive view of both the general trends in Valentine's Day spending and the underlying consumer segments driving those trends.*
+
+**Analysis:**
+
+```{r}
+
+# Select only numeric columns for clustering (exclude Year, PerPerson and PercentCelebrating)
+spending_data <- historical_spending %>%
+  select(Candy, Flowers, Jewelry, GreetingCards, EveningOut, Clothing, GiftCards) 
+
+scaled_data <- scale(spending_data)
+
+# Perform k-means clustering with a chosen number of clusters
+set.seed(123) # For reproducibility
+km_fit <- kmeans(scaled_data, centers = 3, nstart = 10)
+
+print(km_fit)
+
+```
+```{r }
+# Add cluster assignments to the original data
+historical_spending <- historical_spending %>%
+  mutate(Cluster = as.factor(km_fit$cluster))
+
+# Compute summary statistics for each cluster
+historical_spending %>%
+  group_by(Cluster) %>%
+  summarise(across(Candy:GiftCards, mean))
+
+# Perform PCA for dimensionality reduction
+pca_result <- prcomp(scaled_data, scale = TRUE)
+
+# Create a data frame for plotting
+pca_data <- as.data.frame(pca_result$x) %>%
+  select(PC1, PC2) %>%
+  mutate(Cluster = historical_spending$Cluster)
+
+# Plot the clusters using ggplot2
+ggplot(pca_data, aes(x = PC1, y = PC2, color = Cluster)) +
+  geom_point(size = 3, alpha = 0.8) +
+  labs(
+    title = "Clusters of Valentine's Day Spending Patterns",
+    x = "Principal Component 1",
+    y = "Principal Component 2",
+    color = "Cluster"
+  ) +
+  scale_color_brewer(palette = "Set1")+
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+  
+
+```
+
+```{r}
+# Gather the data into a long format for easier plotting
+spending_long <- historical_spending %>%
+  gather(key = "Category", value = "Spending", Candy, Flowers, Jewelry, GreetingCards, EveningOut, Clothing, GiftCards)
+
+# Plot the trend of Per Person spending over the years across different categories
+ggplot(spending_long, aes(x = Year, y = Spending, color = Category)) +
+  geom_line(size = 1) + 
+  geom_point(size = 2) + 
+  labs(
+    title = "Trends in Per Person Spending on Valentine's Day (by Category)",
+    x = "Year",
+    y = "Per Person Spending ($)",
+    color = "Gift Category"
+  ) +
+  theme_minimal() +
+  scale_x_continuous(
+    breaks = unique(historical_spending$Year), 
+    labels = as.character(unique(historical_spending$Year)) 
+  ) +
+  scale_y_continuous(limits = c(5,50)) +
+  scale_color_discrete_qualitative(palette = "dark 3")
+ 
+```
+
+
+**Discussion:**  *The analysis of Valentine's Day spending patterns revealed three distinct consumer segments, each characterized by varying levels of expenditure across gift categories. Cluster 1 represents the most conservative spenders, with the lowest averages across categories such as Candy (10.07), Flowers (12.81), and Jewelry (25.77). This group likely includes younger individuals, students, or budget-conscious consumers who prefer affordable, traditional gifts like GreetingCards. In contrast, Cluster 2 reflects the highest spenders, with significant allocations toward Jewelry (39.37), EveningOut (27.84), and Clothing (20.73). These consumers prioritize luxury and experiential gifts, possibly representing affluent individuals or couples celebrating milestones. Cluster 3 strikes a middle ground, with moderate spending across most categories but the highest spending on EveningOut (28.47), suggesting a focus on experiences rather than material items.*  
+
+*The trend analysis complements these findings, showing a steady increase in per-person spending across categories like Jewelry and EveningOut over time, likely driven by rising incomes and a shift toward experiential celebrations. Categories such as Candy and GreetingCards, however, exhibit relatively flat trends, reinforcing their role as staple, low-cost options. These patterns highlight the evolving priorities of consumers, with some gravitating toward premium offerings and others adhering to traditional, budget-friendly gifts. Together, the clustering and trend analysis provide a nuanced understanding of how Valentine's Day spending varies by consumer segment and category, offering valuable insights for marketers and retailers.*
+
